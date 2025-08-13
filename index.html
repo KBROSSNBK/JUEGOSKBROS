@@ -35,7 +35,7 @@
   /* FAB reiniciar */
   .fab{position:fixed;right:12px;bottom:12px;z-index:6;pointer-events:auto}
   @media (max-width:780px){
-    .fab{bottom:calc(env(safe-area-inset-bottom,0) + 84px);} /* para no tapar la barra móvil */
+    .fab{bottom:calc(env(safe-area-inset-bottom,0) + 98px);} /* despega de la barra móvil */
   }
 
   /* Overlay de cuenta */
@@ -48,38 +48,56 @@
 
   .toast{position:fixed;left:50%;transform:translateX(-50%);top:56px;z-index:12;color:#fff;font-weight:800;text-shadow:0 0 10px rgba(0,231,255,.5);pointer-events:none}
 
-  /* ===== Barra móvil fija y centrada ===== */
+  /* ===== Barra móvil (D-Pad + Lanzar) ===== */
   .mobileBar{
     position:fixed;
     left:50%;
     transform:translateX(-50%);
     bottom:calc(env(safe-area-inset-bottom,0) + 12px);
-    width:min(520px, 96vw);
+    width:min(560px, 96vw);
     display:none;
-    gap:.6rem;
+    gap:.8rem;
     z-index:11;
-    padding:.5rem;
+    padding:.6rem;
     background:rgba(10,14,24,.55);
     border:1px solid #202842;
     border-radius:16px;
     box-shadow:0 12px 40px rgba(0,0,0,.45), inset 0 0 20px rgba(255,255,255,.04);
     backdrop-filter: blur(10px);
     pointer-events:auto;
+    align-items:center;
   }
+  .mobileCol{display:flex;align-items:center;gap:.6rem;flex:1}
+  .dpad{
+    display:grid;
+    grid-template-columns:repeat(3,56px);
+    grid-template-rows:repeat(3,56px);
+    place-items:center;
+    gap:.35rem;
+    justify-content:center;
+    align-content:center;
+    margin-left:.2rem;
+  }
+  .dpad .spacer{width:56px;height:56px;opacity:0}
   .mobileBtn{
-    flex:1;
-    padding:1rem;
+    width:56px;height:56px;
     font-weight:900;
     border-radius:12px;
     border:1px solid #2a3358;
     background:#0f1426;
     color:var(--ink);
     box-shadow:0 6px 18px rgba(0,0,0,.35);
+    display:flex;align-items:center;justify-content:center;
+    user-select:none;
   }
-  .mobileBtn.primary{background:linear-gradient(180deg,#00e7ff,#33b6ff);color:#061119;border-color:#00e7ff}
+  .mobileBtn:active{transform:translateY(1px)}
+  .mobileBtn.primary{
+    width:auto;height:56px;padding:0 18px;min-width:120px;
+    background:linear-gradient(180deg,#00e7ff,#33b6ff);color:#061119;border-color:#00e7ff
+  }
   @media (max-width:780px){ .mobileBar{display:flex} }
 
-  /* Mejoras responsive en top badges (evita desbordes en móviles chicos) */
+  /* Responsive en top para pantallas chicas */
   @media (max-width:520px){
     .top{flex-direction:column;align-items:stretch;gap:.5rem}
     .badge{justify-content:space-between}
@@ -110,8 +128,8 @@
       <div id="menu" class="card">
         <h1 class="title">BEYBLADE NEON</h1>
         <div class="muted">
-          Apunta con <b>A/D</b> o ◀▶. En <b>GO!</b> presiona <b>Espacio</b> (o <b>Shift</b> en P2) para lanzar (misma potencia).<br/>
-          Boost con <b>W/A/S/D</b> cada <b>0,75s</b>. En móvil usa la barra inferior.
+          En <b>GO!</b> presiona <b>Espacio</b> (o <b>Shift</b> en P2) para lanzar (misma potencia).<br/>
+          Boost con <b>W/A/S/D</b> cada <b>0,75s</b>. En móvil usa el D-Pad inferior.
         </div>
         <div class="row">
           <button id="btnP1" class="primary" type="button">Jugar (P1 vs CPU)</button>
@@ -121,11 +139,26 @@
     </div>
   </div>
 
-  <!-- Barra móvil fija (centrada) -->
-  <div class="mobileBar" id="mobileBar">
-    <button id="btnLeft"  class="mobileBtn"       type="button">◀</button>
-    <button id="btnPower" class="mobileBtn primary" type="button">LANZAR</button>
-    <button id="btnRight" class="mobileBtn"      type="button">▶</button>
+  <!-- Barra móvil: D-Pad (⬆⬇⬅➡) + Lanzar -->
+  <div class="mobileBar" id="mobileBar" aria-label="Controles táctiles">
+    <div class="mobileCol" style="flex:1.4">
+      <div class="dpad" role="group" aria-label="D-Pad">
+        <div class="spacer"></div>
+        <button id="btnUp"    class="mobileBtn" type="button" aria-label="Arriba">▲</button>
+        <div class="spacer"></div>
+
+        <button id="btnLeft"  class="mobileBtn" type="button" aria-label="Izquierda">◀</button>
+        <div class="spacer"></div>
+        <button id="btnRight" class="mobileBtn" type="button" aria-label="Derecha">▶</button>
+
+        <div class="spacer"></div>
+        <button id="btnDown"  class="mobileBtn" type="button" aria-label="Abajo">▼</button>
+        <div class="spacer"></div>
+      </div>
+    </div>
+    <div class="mobileCol" style="justify-content:flex-end;flex:1">
+      <button id="btnPower" class="mobileBtn primary" type="button">LANZAR</button>
+    </div>
   </div>
 
   <div class="fab">
@@ -157,6 +190,8 @@
     btnP1: document.getElementById('btnP1'),
     btn2P: document.getElementById('btn2P'),
     btnRestart: document.getElementById('btnRestart'),
+    btnU: document.getElementById('btnUp'),
+    btnD: document.getElementById('btnDown'),
     btnL: document.getElementById('btnLeft'),
     btnR: document.getElementById('btnRight'),
     btnP: document.getElementById('btnPower'),
@@ -167,10 +202,9 @@
     toast: document.getElementById('toast')
   };
 
-  /* Canvas + safe-area alto */
+  /* Canvas + altura real móvil */
   let W=0,H=0,DPR=1;
   function viewportH(){
-    // Corrige el 100vh en móviles (UI bars)
     return Math.max(document.documentElement.clientHeight, window.innerHeight || 0);
   }
   function resize(){
@@ -448,7 +482,7 @@
   hud.btn2P.onclick=()=>{ game.twoPlayers=true;  hud.cpuLabel.textContent='P2';  startRound(); };
   hud.btnRestart.onclick=()=> startRound();
 
-  // Controles
+  // Teclado
   const keys=new Set();
   addEventListener('keydown',e=>{
     if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','a','s','d','w','A','S','D','W',' ','r','R','Shift'].includes(e.key)) e.preventDefault();
@@ -461,10 +495,15 @@
   });
   addEventListener('keyup',e=>{ keys.delete(e.key); });
 
-  // Móvil (barra fija)
-  hud.btnL.addEventListener('touchstart',e=>{e.preventDefault(); game.p1.applyBoostDir(-1,0);});
-  hud.btnR.addEventListener('touchstart',e=>{e.preventDefault(); game.p1.applyBoostDir( 1,0);});
-  hud.btnP.addEventListener('touchstart',e=>{e.preventDefault(); if(game.phase==='window' && game.p1.launching) game.p1.fairLaunch(game.angle1); });
+  // Táctil (D-Pad + Lanzar)
+  function touch(btn, fn){
+    btn.addEventListener('touchstart', e=>{ e.preventDefault(); fn(); }, {passive:false});
+  }
+  touch(hud.btnU, ()=> game.p1.applyBoostDir(0,-1));
+  touch(hud.btnD, ()=> game.p1.applyBoostDir(0, 1));
+  touch(hud.btnL, ()=> game.p1.applyBoostDir(-1,0));
+  touch(hud.btnR, ()=> game.p1.applyBoostDir( 1,0));
+  touch(hud.btnP, ()=> { if(game.phase==='window' && game.p1.launching) game.p1.fairLaunch(game.angle1); });
 
   // Lanzamiento justo
   function triggerFairLaunchP1(){ if(game.phase==='window' && game.p1.launching) game.p1.fairLaunch(game.angle1); }
