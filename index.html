@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"/>
 <title>Beyblade Neon</title>
 <style>
   :root{
@@ -13,14 +13,16 @@
   *{box-sizing:border-box}
   html,body{height:100%;margin:0;background:radial-gradient(1200px 800px at 50% -10%,#101523,#07090d),var(--bg);color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;overflow:hidden}
   canvas{position:fixed;inset:0;width:100vw;height:100vh;touch-action:none;pointer-events:none;z-index:1;display:block}
-  .hud{position:fixed;inset:0;display:grid;grid-template-rows:auto 1fr auto;z-index:5}
-  .top{display:flex;gap:.75rem;justify-content:space-between;align-items:center;padding:.75rem 1rem}
+
+  /* HUD general */
+  .hud{position:fixed;inset:0;display:grid;grid-template-rows:auto 1fr;z-index:5;pointer-events:none}
+  .top{display:flex;gap:.75rem;justify-content:space-between;align-items:center;padding:.75rem 1rem;pointer-events:auto}
   .badge{display:flex;align-items:center;gap:.5rem;background:rgba(15,20,32,.7);border:1px solid #1e2740;border-radius:999px;padding:.45rem .7rem;backdrop-filter:blur(6px)}
   .meter{--c:#2ecc71;height:10px;width:min(36vw,240px);background:#0b1020;border:1px solid #283153;border-radius:999px;overflow:hidden}
   .fill{height:100%;background:linear-gradient(90deg,var(--c),transparent);box-shadow:0 0 10px var(--c);transition:width .12s}
   .score{font-weight:800;letter-spacing:.3px;min-width:80px;text-align:right}
   .score.small{font-size:.85rem;opacity:.9;min-width:auto}
-  .center{display:grid;place-items:center}
+  .center{display:grid;place-items:center;pointer-events:auto}
   .card{width:min(520px,92vw);padding:18px;border-radius:16px;border:1px solid #232a45;background:linear-gradient(180deg,rgba(14,18,26,.9),rgba(10,12,16,.9));box-shadow:0 20px 60px rgba(0,0,0,.45)}
   .title{margin:.2rem 0 0;font-size:1.7rem;font-weight:900;letter-spacing:.4px;text-align:center}
   .muted{margin:.25rem 0 .5rem;color:var(--muted);text-align:center}
@@ -29,15 +31,60 @@
   button:hover{transform:translateY(-1px)} button:active{transform:translateY(1px)}
   .primary{background:linear-gradient(180deg,#00e7ff,#33b6ff);color:#051018;border-color:#00e7ff;box-shadow:0 0 20px rgba(0,231,255,.35), inset 0 0 10px rgba(255,255,255,.2)}
   .ghost{background:#0e1426}
-  .bottom{display:flex;justify-content:center;padding:.75rem}
-  .mobile{display:none;gap:.5rem}
-  @media (max-width:780px){ .mobile{display:flex} .meter{width:40vw} }
-  .fab{position:fixed;right:12px;bottom:12px;z-index:6}
+
+  /* FAB reiniciar */
+  .fab{position:fixed;right:12px;bottom:12px;z-index:6;pointer-events:auto}
+  @media (max-width:780px){
+    .fab{bottom:calc(env(safe-area-inset-bottom,0) + 84px);} /* para no tapar la barra móvil */
+  }
+
+  /* Overlay de cuenta */
   .overlay{position:fixed;left:0;right:0;top:0;display:none;z-index:10;pointer-events:none;color:#fff;text-shadow:0 0 18px rgba(0,231,255,.6), 0 0 28px rgba(138,43,255,.5);font-weight:900;padding:12px 16px;text-align:left}
   .overlay .big{font-size:min(16vw,120px);letter-spacing:.02em;line-height:1}
   .overlay .small{font-size:min(4.5vw,22px);opacity:.9}
-  .legend{position:fixed;left:10px;bottom:10px;font-size:12px;color:#9fb0ff;opacity:.8}
-  .toast{position:fixed;left:50%;transform:translateX(-50%);top:56px;z-index:12;color:#fff;font-weight:800;text-shadow:0 0 10px rgba(0,231,255,.5)}
+
+  .legend{position:fixed;left:10px;bottom:10px;font-size:12px;color:#9fb0ff;opacity:.8;z-index:4}
+  @media (max-width:780px){ .legend{display:none} }
+
+  .toast{position:fixed;left:50%;transform:translateX(-50%);top:56px;z-index:12;color:#fff;font-weight:800;text-shadow:0 0 10px rgba(0,231,255,.5);pointer-events:none}
+
+  /* ===== Barra móvil fija y centrada ===== */
+  .mobileBar{
+    position:fixed;
+    left:50%;
+    transform:translateX(-50%);
+    bottom:calc(env(safe-area-inset-bottom,0) + 12px);
+    width:min(520px, 96vw);
+    display:none;
+    gap:.6rem;
+    z-index:11;
+    padding:.5rem;
+    background:rgba(10,14,24,.55);
+    border:1px solid #202842;
+    border-radius:16px;
+    box-shadow:0 12px 40px rgba(0,0,0,.45), inset 0 0 20px rgba(255,255,255,.04);
+    backdrop-filter: blur(10px);
+    pointer-events:auto;
+  }
+  .mobileBtn{
+    flex:1;
+    padding:1rem;
+    font-weight:900;
+    border-radius:12px;
+    border:1px solid #2a3358;
+    background:#0f1426;
+    color:var(--ink);
+    box-shadow:0 6px 18px rgba(0,0,0,.35);
+  }
+  .mobileBtn.primary{background:linear-gradient(180deg,#00e7ff,#33b6ff);color:#061119;border-color:#00e7ff}
+  @media (max-width:780px){ .mobileBar{display:flex} }
+
+  /* Mejoras responsive en top badges (evita desbordes en móviles chicos) */
+  @media (max-width:520px){
+    .top{flex-direction:column;align-items:stretch;gap:.5rem}
+    .badge{justify-content:space-between}
+    .meter{width:52vw}
+  }
 </style>
 </head>
 <body>
@@ -64,7 +111,7 @@
         <h1 class="title">BEYBLADE NEON</h1>
         <div class="muted">
           Apunta con <b>A/D</b> o ◀▶. En <b>GO!</b> presiona <b>Espacio</b> (o <b>Shift</b> en P2) para lanzar (misma potencia).<br/>
-          Boost dirigido con <b>W/A/S/D</b> cada <b>0,75s</b>.
+          Boost con <b>W/A/S/D</b> cada <b>0,75s</b>. En móvil usa la barra inferior.
         </div>
         <div class="row">
           <button id="btnP1" class="primary" type="button">Jugar (P1 vs CPU)</button>
@@ -72,14 +119,13 @@
         </div>
       </div>
     </div>
+  </div>
 
-    <div class="bottom">
-      <div class="mobile">
-        <button id="btnLeft"  type="button">◀</button>
-        <button id="btnPower" type="button" class="primary">CARGAR</button>
-        <button id="btnRight" type="button">▶</button>
-      </div>
-    </div>
+  <!-- Barra móvil fija (centrada) -->
+  <div class="mobileBar" id="mobileBar">
+    <button id="btnLeft"  class="mobileBtn"       type="button">◀</button>
+    <button id="btnPower" class="mobileBtn primary" type="button">LANZAR</button>
+    <button id="btnRight" class="mobileBtn"      type="button">▶</button>
   </div>
 
   <div class="fab">
@@ -99,7 +145,7 @@
   const cvs = document.getElementById('game');
   const ctx = cvs.getContext('2d');
 
-  // HUD (sin depender de globals por id)
+  // HUD
   const hud = {
     m1: document.getElementById('m1'),
     m2: document.getElementById('m2'),
@@ -121,9 +167,17 @@
     toast: document.getElementById('toast')
   };
 
-  // Canvas
+  /* Canvas + safe-area alto */
   let W=0,H=0,DPR=1;
-  function resize(){ DPR=Math.min(2,window.devicePixelRatio||1); W=cvs.width=Math.floor(innerWidth*DPR); H=cvs.height=Math.floor(innerHeight*DPR); }
+  function viewportH(){
+    // Corrige el 100vh en móviles (UI bars)
+    return Math.max(document.documentElement.clientHeight, window.innerHeight || 0);
+  }
+  function resize(){
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=cvs.width=Math.floor(innerWidth*DPR);
+    H=cvs.height=Math.floor(viewportH()*DPR);
+  }
   resize(); addEventListener('resize', resize);
 
   // Arena
@@ -360,7 +414,7 @@
   }
 
   const game={
-    running:false,twoPlayers:false,phase:'menu', // 'countdown' | 'window' | 'battle'
+    running:false,twoPlayers:false,phase:'menu',
     countdownLeft:0, windowLeft:0, spawnTimer:0, cpuBoostTimer:3,
     p1:new Blade({name:'P1', color:getComputedStyle(document.documentElement).getPropertyValue('--p1'), accent:'#7ad8ff'}),
     p2:new Blade({name:'CPU', color:getComputedStyle(document.documentElement).getPropertyValue('--p2'), accent:'#ffb4b4'}),
@@ -378,10 +432,11 @@
     items.length=0; game.spawnTimer=1.5; game.cpuBoostTimer=3;
   }
 
-  function showMenu(show){ hud.menu.style.display = show ? 'block' : 'none'; }
-  function showOverlay(txt, sub){ hud.overlay.style.display='block'; hud.countBig.textContent=txt; hud.countSmall.textContent=sub||''; }
-  function hideOverlay(){ hud.overlay.style.display='none'; }
+  function showMenu(show){ document.getElementById('menu').style.display = show ? 'block' : 'none'; }
+  function showOverlay(txt, sub){ document.getElementById('count').style.display='block'; hud.countBig.textContent=txt; hud.countSmall.textContent=sub||''; }
+  function hideOverlay(){ document.getElementById('count').style.display='none'; }
 
+  function setupArena(){ arena.cx=W/2; arena.cy=H/2; arena.r=Math.min(W,H)*0.40; arena.innerR=arena.r*0.94; }
   function startRound(){
     setupArena(); resetPositions(); showMenu(false);
     game.running=true; game.phase='countdown'; game.countdownLeft=3.0; game.windowLeft=0;
@@ -393,7 +448,7 @@
   hud.btn2P.onclick=()=>{ game.twoPlayers=true;  hud.cpuLabel.textContent='P2';  startRound(); };
   hud.btnRestart.onclick=()=> startRound();
 
-  // Controles (✅ ÚNICO bloque de teclas)
+  // Controles
   const keys=new Set();
   addEventListener('keydown',e=>{
     if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','a','s','d','w','A','S','D','W',' ','r','R','Shift'].includes(e.key)) e.preventDefault();
@@ -406,7 +461,7 @@
   });
   addEventListener('keyup',e=>{ keys.delete(e.key); });
 
-  // Móvil
+  // Móvil (barra fija)
   hud.btnL.addEventListener('touchstart',e=>{e.preventDefault(); game.p1.applyBoostDir(-1,0);});
   hud.btnR.addEventListener('touchstart',e=>{e.preventDefault(); game.p1.applyBoostDir( 1,0);});
   hud.btnP.addEventListener('touchstart',e=>{e.preventDefault(); if(game.phase==='window' && game.p1.launching) game.p1.fairLaunch(game.angle1); });
