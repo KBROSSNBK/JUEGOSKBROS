@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"/>
-<title>FINALKRASH – Online (Sala Única)</title>
+<title>FINALKRASH — Online (Sala Única)</title>
 <style>
   :root{ --bg:#0a0c10; --ink:#e9f0ff; --muted:#a7b0c8; --hp1:#2ecc71; --hp2:#ff4a6e; }
   *{box-sizing:border-box}
@@ -116,7 +116,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
 import { getDatabase, ref, push, set, update, remove, onValue, get, runTransaction, onDisconnect, serverTimestamp, onChildAdded } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-database.js";
 
-/* Config Firebase (la tuya) */
+/* Config Firebase */
 const firebaseConfig = {
   apiKey: "AIzaSyDal6PPI7n6qF4tVOV2pxav4noWWoHhKms",
   authDomain: "juegokbros-738c3.firebaseapp.com",
@@ -164,11 +164,11 @@ let myId=null, myNick=null, isHost=false, joined=false;
 let resetTimer = null;
 
 /* -------- Mundo / Arena -------- */
-const arena={cx:0,cy:0,r:0,innerR:0};
-function setupArena(){ arena.cx=W/2; arena.cy=H/2; arena.r=Math.min(W,H)*0.40; arena.innerR=arena.r*0.94; }
+const arena={cx:0,cy:0,r:0,innerR:0,pillarR:0};
+function setupArena(){ arena.cx=W/2; arena.cy=H/2; arena.r=Math.min(W,H)*0.40; arena.innerR=arena.r*0.94; arena.pillarR=arena.r*0.12; }
 
 /* partículas + confeti */
-const sparks=[];
+const sparks=[]; 
 function pushEvent(ev){ push(evRef, {...ev, ts:serverTimestamp()}); }
 function spawnSparks(x,y,n=14,hue=35){ for(let i=0;i<n;i++){ sparks.push({x,y,vx:Math.cos(rand(0,TAU))*rand(2,6),vy:Math.sin(rand(0,TAU))*rand(2,6),life:rand(12,24),t:0,hue:hue+rand(-10,10)});} }
 function drawSparks(dt){ ctx.save(); ctx.globalCompositeOperation='lighter';
@@ -177,15 +177,19 @@ function drawSparks(dt){ ctx.save(); ctx.globalCompositeOperation='lighter';
     ctx.fillStyle=`hsla(${s.hue},100%,60%,${a})`; ctx.beginPath(); ctx.arc(s.x,s.y,r,0,TAU); ctx.fill();
     ctx.fillStyle=`rgba(255,255,255,${a*0.8})`; ctx.beginPath(); ctx.arc(s.x,s.y,r*0.4,0,TAU); ctx.fill(); }
   ctx.restore(); }
-
-/* Confeti moderado */
-let confetti=[], confettiActive=false;
-function startConfetti(){ confetti=[]; for(let i=0;i<80;i++) confetti.push({x:rand(0,W),y:rand(-H*0.3,-20),vy:rand(1,2.2),vx:rand(-.6,.6),h:Math.floor(Math.random()*360)}); confettiActive=true; }
-function stopConfetti(){ confettiActive=false; confetti.length=0; }
+const confetti=[]; 
+function startConfetti(){ // moderado para evitar lag
+  const pieces = 80;
+  for(let i=0;i<pieces;i++){
+    confetti.push({x:rand(0,W),y:rand(-H*0.3,-20),vy:rand(1,2.2),vx:rand(-.7,.7),h:Math.floor(Math.random()*360)});
+  }
+}
+function clearConfetti(){ confetti.length = 0; }
 function drawConfetti(dt){
-  if(!confettiActive) return;
-  for(let i=confetti.length-1;i>=0;i--){ const c=confetti[i]; c.y+=c.vy*dt*60; c.x+=c.vx*dt*60; if(c.y>H+20) confetti.splice(i,1);
-    ctx.fillStyle=`hsl(${c.h},100%,60%)`; ctx.fillRect(c.x,c.y,3,6);
+  for(let i=confetti.length-1;i>=0;i--){
+    const c=confetti[i]; c.y+=c.vy*dt*60; c.x+=c.vx*dt*60;
+    if(c.y>H+20) confetti.splice(i,1);
+    ctx.fillStyle=`hsl(${c.h},100%,60%)`; ctx.fillRect(c.x,c.y,4,8);
   }
 }
 
@@ -212,7 +216,7 @@ class Blade{
   sprite(){ if(!this.s) this.s=makeSprite(this.baseRadius,this.color,this.accent); return this.s; }
   fairLaunch(angle){ const v=8.5,rpm=this.maxRPM*0.85; this.queued={vx:Math.cos(angle)*v, vy:Math.sin(angle)*v, rpm}; this.hasLaunched=true; vibrate(35); }
   commitQueued(){ if(!this.queued) return; this.vx=this.queued.vx; this.vy=this.queued.vy; this.spinRPM=this.queued.rpm; this.launching=false; this.queued=null; }
-  applyBoost(dx,dy){ if(this.boostCD>0||!this.alive) return; const m=Math.hypot(dx,dy)||1, nx=dx/m, ny=dy/m; const str=3.2; this.vx+=nx*str; this.vy+=ny*str; this.boostCD=0.75; spawnSparks(this.x+nx*this.radius,this.y+ny*this.radius,12,45); pushEvent({type:'boost',x:this.x+nx*this.radius,y:this.y+ny*this.radius,h:45}); vibrate(15); }
+  applyBoost(dx,dy){ if(this.boostCD>0||!this.alive) return; const m=Math.hypot(dx,dy)||1, nx=dx/m, ny=dy/m; const str=3.2; this.vx+=nx*str; this.vy+=ny*str; this.boostCD=0.75; spawnSparks(this.x+nx*this.radius,this.y+ny<this.radius?this.radius:this.radius,12,45); pushEvent({type:'boost',x:this.x+nx*this.radius,y:this.y+ny*this.radius,h:45}); vibrate(15); }
   dmgHP(d){ this.hp=Math.max(0,this.hp-d); if(this.hp<=0) this.alive=false; }
   step(dt){
     this.boostCD=Math.max(0,this.boostCD-dt);
@@ -227,7 +231,7 @@ class Blade{
     const baseDecay=70, velDecay=10*speed;
     this.spinRPM=Math.max(0,this.spinRPM-(baseDecay+velDecay)*dt);
 
-    // Pared (limita al ring)
+    // Pared exterior (mantener dentro del ring)
     const dx=this.x-arena.cx, dy=this.y-arena.cy, d=Math.hypot(dx,dy);
     if(d>arena.innerR-this.radius){
       const nx=dx/d, ny=dy/d, overlap=d-(arena.innerR-this.radius);
@@ -238,6 +242,16 @@ class Blade{
       this.spinRPM=Math.max(0,this.spinRPM-wallLossRPM);
       this.dmgHP(wallHP);
       spawnSparks(this.x,this.y,16,28); pushEvent({type:'wall',x:this.x,y:this.y,h:28});
+    }
+    // Pilar central (sigue igual que antes)
+    const pdx=this.x-arena.cx, pdy=this.y-arena.cy, pd=Math.hypot(pdx,pdy);
+    if(pd < arena.pillarR + this.radius){
+      const nx=pdx/pd, ny=pdy/pd, overlap=(arena.pillarR+this.radius)-pd;
+      this.x+=nx*overlap; this.y+=ny*overlap;
+      const vn=this.vx*nx+this.vy*ny; this.vx-=(2.2*vn)*nx; this.vy-=(2.2*vn)*ny;
+      let pLoss=100, php=7; if(this.shield>0){ pLoss*=0.5; php*=0.6; }
+      this.spinRPM=Math.max(0,this.spinRPM-pLoss); this.dmgHP(php);
+      spawnSparks(this.x,this.y,18,200); pushEvent({type:'pillar',x:this.x,y:this.y,h:200});
     }
   }
   draw(){
@@ -293,8 +307,8 @@ function collide(a,b){
 
 /* ===== ÍTEMS sincronizados ===== */
 const ITEM_TYPES=['shield','giant','damage','rpm'];
-const items = new Map();                 // id -> {x,y,type,claimedBy?}
-const itemsInFlight = new Set();         // anti-spam de transacciones
+const items = new Map();
+const itemsInFlight = new Set();
 function itemRadius(){ return 18*DPR; }
 function drawItems(dt){
   items.forEach(it=>{
@@ -319,7 +333,7 @@ onValue(itemsRef, snap=>{
   for(const id in v){ items.set(id,{id, ...v[id]}); }
 });
 
-/* Intento de recoger (solo con mi blade para reducir tráfico) */
+/* Intento de recoger (solo con mi blade) */
 async function tryPickup(me){
   for(const [id,it] of items){
     if(it.claimedBy) continue;
@@ -333,7 +347,7 @@ async function tryPickup(me){
         if(res.committed && who===myId){
           if(it.type==='shield'){ me.shield=Math.max(me.shield,6); toast('🛡️ Escudo'); }
           if(it.type==='giant'){  me.giant =Math.max(me.giant ,6); toast('🦍 Gigante'); }
-          if(it.type==='damage'){ me.dmg   =Math.max(me.dmg  ,6);   toast('💥 Daño+'); }
+          if(it.type==='damage'){ me.dmg   =Math.max(me.dmg  ,6); toast('💥 Daño+'); }
           if(it.type==='rpm'){    me.spinRPM=Math.min(me.maxRPM*1.05, me.spinRPM+700); toast('⚡ RPM+'); }
           pushEvent({type:'item',x:it.x,y:it.y,h: it.type==='rpm'? 100: 30});
           await remove(ref(db,`partidas/${ROOM_ID}/items/${id}`));
@@ -353,13 +367,16 @@ function drawArena(){
     const g=ctx.createRadialGradient(0,0,r*0.2,0,0,r); g.addColorStop(0,'#0c1120'); g.addColorStop(1,'#080b12'); ctx.fillStyle=g; ctx.fill();
     ctx.strokeStyle = i%2 ? 'rgba(0,231,255,.30)' : 'rgba(138,43,255,.26)'; ctx.lineWidth = i===6?6:4; if(i===5) ctx.setLineDash([10,10]); else ctx.setLineDash([]); ctx.shadowColor = i%2?'rgba(0,231,255,.45)':'rgba(138,43,255,.4)'; ctx.shadowBlur=8; ctx.stroke(); ctx.shadowBlur=0;
   }
-  // borde de seguridad del ring
+  /* Pilar central */
+  ctx.beginPath(); ctx.setLineDash([]); ctx.fillStyle='rgba(255,255,255,.06)'; ctx.strokeStyle='rgba(0,231,255,.55)'; ctx.lineWidth=4;
+  ctx.arc(0,0,arena.pillarR,0,TAU); ctx.fill(); ctx.stroke();
+
   ctx.beginPath(); ctx.arc(0,0,arena.innerR,0,TAU); ctx.setLineDash([8,10]); ctx.strokeStyle='rgba(255,255,255,.25)'; ctx.lineWidth=2; ctx.stroke();
   ctx.restore();
 }
 function drawAim(b,angle){
   ctx.save(); const col='#33d6ff';
-  ctx.strokeStyle=col; ctx.globalAlpha=.95; ctx.lineWidth=4; ctx.shadowColor=col; ctx.shadowBlur=10;
+  ctx.strokeStyle=col; ctx.globalAlpha=.9; ctx.lineWidth=4; ctx.shadowColor=col; ctx.shadowBlur=10;
   ctx.beginPath(); ctx.moveTo(b.x,b.y); ctx.lineTo(b.x+Math.cos(angle)*160,b.y+Math.sin(angle)*160); ctx.stroke();
   ctx.restore();
 }
@@ -370,13 +387,15 @@ addEventListener('keydown',e=>{
   if(['w','a','s','d','W','A','S','D',' '].includes(e.key)) e.preventDefault();
   const me=game.blades.get(myId); if(!me) return;
 
-  if(game.phase==='window' && me.launching){
-    // Girar la barra de dirección con A/D
-    if(e.key==='a' || e.key==='A') game.angle -= 0.15;
-    if(e.key==='d' || e.key==='D') game.angle += 0.15;
-    if(e.key===' ') me.fairLaunch(game.angle);
+  // Ventana de lanzamiento: girar la flecha con A/D y lanzar con ESPACIO
+  if(game.phase==='window'){
+    if(e.key==='a'||e.key==='A'){ game.angle-=0.15; }
+    if(e.key==='d'||e.key==='D'){ game.angle+=0.15; }
+    if(e.key===' ' && me.launching){ me.fairLaunch(game.angle); }
     return;
   }
+
+  // Batalla: WASD = impulso
   if(game.phase==='battle'){
     if(e.key==='w'||e.key==='W') me.applyBoost(0,-1);
     if(e.key==='s'||e.key==='S') me.applyBoost(0, 1);
@@ -406,9 +425,7 @@ function loop(t){
   if(me) tryPickup(me);
 
   for(const b of arr) b.draw();
-  drawSparks(dt);
-  drawConfetti(dt);
-  stepToast(dt);
+  drawSparks(dt); drawConfetti(dt); stepToast(dt);
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
@@ -424,7 +441,6 @@ onValue(jugRef, s=>{
   const obj=s.val()||{};
   hud.lblPlayers.textContent = Object.keys(obj).length;
 
-  // crear/actualizar blades
   for(const id in obj){
     const p=obj[id];
     if(!game.blades.has(id)){
@@ -432,12 +448,23 @@ onValue(jugRef, s=>{
     }
     const b=game.blades.get(id);
     b.nick=p.nick||b.nick;
-    if(id!==myId){ b.x=p.x??b.x; b.y=p.y??b.y; b.vx=p.vx??b.vx; b.vy=p.vy??b.vy; b.spinRPM=p.spinRPM??b.spinRPM; b.hp=p.hp??b.hp; b.alive=p.alive!==false; }
+
+    if(id!==myId){
+      // jugadores remotos: siempre sincronizados desde DB
+      b.x=p.x??b.x; b.y=p.y??b.y; b.vx=p.vx??b.vx; b.vy=p.vy??b.vy; b.spinRPM=p.spinRPM??b.spinRPM; b.hp=p.hp??b.hp; b.alive=p.alive!==false;
+    }else{
+      // *** FIX de spawn: mientras no estamos en batalla (pre/lanzamiento),
+      // mi blade local copia la posición sembrada por el host ***
+      if(game.phase!=='battle' && typeof p.x==='number' && typeof p.y==='number'){
+        b.x=p.x; b.y=p.y;
+        b.vx=p.vx??b.vx; b.vy=p.vy??b.vy;
+        b.spinRPM=p.spinRPM??b.spinRPM; b.hp=p.hp??b.hp; b.alive=p.alive!==false;
+      }
+    }
   }
-  // borrar los que ya no están
   for(const id of [...game.blades.keys()]) if(!obj[id]) game.blades.delete(id);
 
-  // render listado
+  // lista de conectados
   const jugadores = Object.values(obj || {}).map(j => j?.nick || '¿?');
   hud.playerList.innerHTML = '';
   jugadores.forEach(nick => {
@@ -449,7 +476,7 @@ onValue(jugRef, s=>{
   });
   hud.lobbyCount.textContent = `(${jugadores.length}/10)`;
 
-  if (['esperando','pre','lobby','lanzamiento'].includes(game.phase)) hud.lobbyPanel.style.display='block';
+  if (['esperando','pre','lanzamiento'].includes(game.phase)) hud.lobbyPanel.style.display='block';
   else hud.lobbyPanel.style.display='none';
 });
 
@@ -458,16 +485,15 @@ onValue(roomRef, async s=>{
   const v=s.val()||{};
   if(!v.estado){ await update(roomRef,{estado:'esperando',jugCount:0,max:10}); return; }
 
-  // Limpia confeti si salimos del final
-  if(v.estado!=='fin') stopConfetti();
-
   if(v.estado==='esperando'){
-    if(!joined){ showMenu(true); hideOverlay(); game.phase='menu'; }
-    else{ showMenu(false); overlay('ESPERANDO','Se necesitan 2+ jugadores'); game.phase='lobby'; }
+    showMenu(!joined); hideOverlay(); clearConfetti();
+    game.phase = joined ? 'lobby' : 'menu';
+    if(joined) overlay('ESPERANDO','Se necesitan 2+ jugadores');
     hud.lobbyPanel.style.display = 'block';
   }
 
   if(v.estado==='pre'){
+    clearConfetti();
     // host siembra posiciones e items
     if(isHost && !v.posSeeded){
       const jSnap=await get(jugRef); const updates={};
@@ -481,7 +507,7 @@ onValue(roomRef, async s=>{
         updates[`partidas/${ROOM_ID}/jugadores/${id}/alive`]=true;
       });
       updates[`partidas/${ROOM_ID}/posSeeded`]=true;
-      updates[`partidas/${ROOM_ID}/items`] = null; // limpiar items anteriores
+      updates[`partidas/${ROOM_ID}/items`] = null;
       await update(ref(db), updates);
     }
     showMenu(false);
@@ -489,12 +515,14 @@ onValue(roomRef, async s=>{
       if(left<=0){ if(isHost){ const now=Date.now(); update(roomRef,{estado:'lanzamiento',tGo:now+3000}); } }
       else setTimeout(tick,250);
     }; tick();
+    game.phase='lobby';
     hud.lobbyPanel.style.display = 'block';
   }
 
   if(v.estado==='lanzamiento'){
+    clearConfetti();
     game.phase='window'; showMenu(false);
-    const tick=()=>{ const left=Math.max(0, Math.ceil((v.tGo - Date.now())/1000)); overlay(left>0?String(left):'GO!','Presiona A/D para apuntar y ESPACIO para lanzar');
+    const tick=()=>{ const left=Math.max(0, Math.ceil((v.tGo - Date.now())/1000)); overlay(left>0?String(left):'GO!','Presiona ESPACIO / LANZAR');
       if(left<=0){ if(isHost){ update(roomRef,{estado:'jugando'}); } }
       else setTimeout(tick,120);
     }; tick();
@@ -502,6 +530,7 @@ onValue(roomRef, async s=>{
   }
 
   if(v.estado==='jugando'){
+    clearConfetti();
     hideOverlay(); game.phase='battle';
     hud.lobbyPanel.style.display = 'none';
     const me=game.blades.get(myId);
@@ -509,6 +538,9 @@ onValue(roomRef, async s=>{
   }
 
   if (v.estado === 'fin') {
+    // Si un usuario nuevo abre la página, no mostrar confeti/ganador.
+    if(!joined){ showMenu(true); hideOverlay(); clearConfetti(); return; }
+
     hud.lobbyPanel.style.display = 'none';
     if (v.winnerNick) {
       overlay('¡' + v.winnerNick + '!', 'CAMPEÓN');
@@ -531,7 +563,7 @@ onValue(roomRef, async s=>{
   }
 });
 
-/* Spawner de ítems (solo host) — intento cada 1.5s si faltan */
+/* Spawner de ítems (solo host) */
 setInterval(async ()=>{
   if(!isHost) return;
   const state = await get(ref(db,`partidas/${ROOM_ID}/estado`));
@@ -539,18 +571,16 @@ setInterval(async ()=>{
   const snap = await get(itemsRef);
   const count = snap.exists()? Object.keys(snap.val()).length : 0;
   if(count >= 3) return;
-
   const p = randomSpawn();
   const type = ITEM_TYPES[Math.floor(Math.random()*ITEM_TYPES.length)];
   await push(itemsRef, { x:p.x, y:p.y, type, created: serverTimestamp() });
-}, 1500);
+}, 2000);
 
 /* Unirse a sala única */
 async function joinSingleRoom(){
-  myNick = (hud.nick.value||'').trim();
+  myNick = (hud.nick.value||'').trim(); 
   if(!myNick){ alert('Escribe tu apodo'); return; }
 
-  // cap de 10
   const roomSnapBefore = await get(roomRef);
   const rv = roomSnapBefore.val() || {};
   const currentCount = rv.jugCount || 0;
@@ -562,7 +592,7 @@ async function joinSingleRoom(){
     await set(roomRef,{estado:'esperando',jugCount:0,max:10});
   }
 
-  // Crear nodo jugador -> myId
+  // Crear nodo jugador
   const node = push(jugRef); myId = node.key;
 
   // Host si vacío
@@ -570,10 +600,9 @@ async function joinSingleRoom(){
   const hostFinal = await get(ref(db,`partidas/${ROOM_ID}/hostId`));
   isHost = (hostFinal.val() === myId);
 
-  // Posición provisional dentro del ring (quieto) + crear blade local YA
+  // Posición provisional (dentro del ring) + blade local inmediato
   setupArena();
   let p = randomSpawn();
-
   const dx = p.x - arena.cx, dy = p.y - arena.cy;
   const dist = Math.hypot(dx, dy);
   const maxR = arena.innerR - 70;
@@ -582,14 +611,12 @@ async function joinSingleRoom(){
   const myBlade = new Blade({ id: myId, nick: myNick, x:p.x, y:p.y, color:'#33d6ff', accent:'#7ad8ff', launching:true, hasLaunched:false, alive:true, hp:1000 });
   game.blades.set(myId, myBlade);
 
-  // Sube tu estado al servidor
   await set(ref(db,`partidas/${ROOM_ID}/jugadores/${myId}`), {
     nick: myNick, alive:true, hp:1000,
     x:p.x, y:p.y, vx:0, vy:0, spinRPM:0
   });
   onDisconnect(ref(db,`partidas/${ROOM_ID}/jugadores/${myId}`)).remove();
 
-  // Contador jugadores
   await runTransaction(ref(db,`partidas/${ROOM_ID}/jugCount`), c => (c||0)+1);
   onDisconnect(ref(db,`partidas/${ROOM_ID}/jugCount`)).set(Math.max(0, (currentCount+1) - 1));
 
@@ -606,13 +633,12 @@ async function joinSingleRoom(){
 }
 hud.btnJoin.onclick = joinSingleRoom;
 
-/* Envío periódico de mi estado + verificación de ganador */
+/* Envío periódico de mi estado + ganador (host) */
 setInterval(async ()=>{
   if(!myId) return;
   const me=game.blades.get(myId); if(!me) return;
   await update(ref(db,`partidas/${ROOM_ID}/jugadores/${myId}`),{x:me.x,y:me.y,vx:me.vx,vy:me.vy,spinRPM:me.spinRPM,hp:Math.round(me.hp),alive:me.alive});
 
-  // host determina ganador
   if(isHost){
     const state=await get(ref(db,`partidas/${ROOM_ID}/estado`));
     if(state.val()==='jugando'){
