@@ -154,6 +154,7 @@ const jugRef  = ref(db, `partidas/${ROOM_ID}/jugadores`);
 const evRef   = ref(db, `partidas/${ROOM_ID}/events`);
 
 let myId=null, myNick=null, isHost=false, joined=false;
+let resetTimer = null; // <-- NUEVO para auto-reset
 
 /* -------- Mundo / Arena -------- */
 const arena={cx:0,cy:0,r:0,innerR:0,pillarR:0};
@@ -232,7 +233,15 @@ class Blade{
 }
 
 const game={phase:'menu', blades:new Map(), angle:-Math.PI/3, last:0};
-function randomSpawn(){ let r=rand(0, arena.innerR-40), a=rand(0,TAU); return {x:arena.cx+Math.cos(a)*r*0.7, y:arena.cy+Math.sin(a)*r*0.7}; }
+
+/* Spawn SEGURO dentro del ring */
+function randomSpawn(){
+  const margin = 60;                                   // para no tocar pared
+  const r = Math.max(0, arena.innerR - margin) * Math.sqrt(Math.random());
+  const a = rand(0, TAU);
+  return { x: arena.cx + Math.cos(a)*r, y: arena.cy + Math.sin(a)*r };
+}
+
 function collide(a,b){
   if(!a.alive||!b.alive) return;
   const dx=b.x-a.x, dy=b.y-a.y, d=Math.hypot(dx,dy), minD=a.radius+b.radius;
@@ -393,9 +402,33 @@ onValue(roomRef, async s=>{
     if(me){ if(me.hasLaunched) me.commitQueued(); else me.alive=false; }
   }
 
-  if(v.estado==='fin'){
+  /* ---- FIN: CAMPEÓN + AUTO-RESET + AUTO-REINICIO ---- */
+  if (v.estado === 'fin') {
     hud.lobbyPanel.style.display = 'none';
-    if(v.winnerNick){ overlay('¡'+v.winnerNick+'!','CAMPEÓN'); startConfetti(); setTimeout(()=>hideOverlay(),5000); }
+    if (v.winnerNick) {
+      overlay('¡' + v.winnerNick + '!', 'CAMPEÓN');
+      startConfetti();
+      setTimeout(() => hideOverlay(), 5000);
+    }
+    if (isHost) {
+      if (resetTimer) clearTimeout(resetTimer);
+      resetTimer = setTimeout(async () => {
+        await update(roomRef, {
+          estado: 'esperando',
+          tPre: null,
+          tGo: null,
+          winnerNick: null,
+          posSeeded: false
+        });
+        const snap2 = await get(roomRef);
+        const vv = snap2.val() || {};
+        const c = vv.jugCount || 0;
+        if (c >= 2) {
+          const now = Date.now();
+          await update(roomRef, { estado: 'pre', tPre: now + 10000 }); // 10s pre
+        }
+      }, 5000);
+    }
   }
 });
 
@@ -426,7 +459,17 @@ async function joinSingleRoom(){
 
   // Posición provisional dentro del ring (quieto)
   setupArena();
-  const p = randomSpawn();
+  let p = randomSpawn();
+
+  // Seguridad extra: clamp por si algo raro lo deja fuera
+  const dx = p.x - arena.cx, dy = p.y - arena.cy;
+  const dist = Math.hypot(dx, dy);
+  const maxR = arena.innerR - 70;
+  if (dist > maxR) {
+    p.x = arena.cx + (dx / dist) * maxR;
+    p.y = arena.cy + (dy / dist) * maxR;
+  }
+
   await set(ref(db,`partidas/${ROOM_ID}/jugadores/${myId}`), {
     nick: myNick, alive:true, hp:1000,
     x:p.x, y:p.y, vx:0, vy:0, spinRPM:0
@@ -445,7 +488,6 @@ async function joinSingleRoom(){
     }
   });
 
-  // Mostrar “ESPERANDO” con tu beyblade ya en el ring
   overlay('ESPERANDO','Se necesitan 2+ jugadores');
   game.phase='lobby';
 }
@@ -467,7 +509,7 @@ setInterval(async ()=>{
       if(aliveIds.length<=1){
         const winnerNick = aliveIds[0]?.nick || 'Nadie';
         await update(roomRef,{estado:'fin',winnerNick});
-        setTimeout(async()=>{ await update(roomRef,{estado:'esperando',tPre:null,tGo:null,winnerNick:null,posSeeded:false}); },5000);
+        // (el auto-reset se maneja en el handler de estado 'fin')
       }
     }
   }
