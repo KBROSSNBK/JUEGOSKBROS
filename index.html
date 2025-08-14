@@ -123,7 +123,7 @@ const roomRef = ref(db, `partidas/${ROOM_ID}`);
 const jugRef  = ref(db, `partidas/${ROOM_ID}/jugadores`);
 const evRef   = ref(db, `partidas/${ROOM_ID}/events`);
 
-let myId=null, myNick=null, isHost=false;
+let myId=null, myNick=null, isHost=false, joined=false;
 
 /* ---------------- Mundo / Arena ---------------- */
 const arena={cx:0,cy:0,r:0,innerR:0,pillarR:0};
@@ -174,7 +174,7 @@ class Blade{
       this.spinRPM=Math.max(0,this.spinRPM-120); this.dmg(10);
       spawnSparks(this.x,this.y,16,28); pushEvent({type:'wall',x:this.x,y:this.y,h:28});
     }
-    // Pilar central (rebote fuerte)
+    // Pilar central
     const pdx=this.x-arena.cx, pdy=this.y-arena.cy, pd=Math.hypot(pdx,pdy);
     if(pd < arena.pillarR + this.radius){
       const nx=pdx/pd, ny=pdy/pd, overlap=(arena.pillarR+this.radius)-pd;
@@ -218,7 +218,7 @@ function collide(a,b){
   const rel=Math.abs(va-vb), baseRPM=60+35*rel, baseHP=12+7*rel;
   a.spinRPM=Math.max(0,a.spinRPM-baseRPM); b.spinRPM=Math.max(0,b.spinRPM-baseRPM);
   a.dmg(baseHP); b.dmg(baseHP);
-  const mx=(a.x+b.x)/2, my=(a.y+b.y)/2; spawnSparks(mx,my,22,Math.floor(Math.random()*360)); if(isHost) pushEvent({type:'hit',x:mx,y:my,h:Math.floor(Math.random()*360)});
+  const mx=(a.x+b.x)/2, my=(a.y+b.y)/2; spawnSparks(mx,my,22,Math.floor(Math.random()*360)); pushEvent({type:'hit',x:mx,y:my,h:Math.floor(Math.random()*360)});
 }
 
 /* dibujo arena + pilar */
@@ -291,7 +291,6 @@ onValue(jugRef, s=>{
     b.nick=p.nick||b.nick;
     if(id!==myId){ // datos remotos
       b.x=p.x??b.x; b.y=p.y??b.y; b.vx=p.vx??b.vx; b.vy=p.vy??b.vy; b.spinRPM=p.spinRPM??b.spinRPM; b.hp=p.hp??b.hp; b.alive=p.alive!==false;
-      // launching se mantiene true hasta que entre a 'jugando'
     }
   }
   // borrar los que ya no están
@@ -301,11 +300,11 @@ onValue(jugRef, s=>{
 /* Estado de la sala */
 onValue(roomRef, async s=>{
   const v=s.val()||{};
-  // saneamiento inicial
   if(!v.estado){ await update(roomRef,{estado:'esperando',jugCount:0}); return; }
 
   if(v.estado==='esperando'){
-    showMenu(true); overlay('ESPERANDO','Se necesitan 2+ jugadores'); game.phase='menu';
+    if(!joined){ showMenu(true); hideOverlay(); game.phase='menu'; }
+    else{ showMenu(false); overlay('ESPERANDO','Se necesitan 2+ jugadores'); game.phase='lobby'; }
   }
 
   if(v.estado==='pre'){
@@ -353,7 +352,7 @@ onValue(roomRef, async s=>{
 /* ---------------- Unirse a la sala única ---------------- */
 async function joinSingleRoom(){
   myNick = (hud.nick.value||'').trim(); if(!myNick){ alert('Escribe tu apodo'); return; }
-  showMenu(false);
+  joined=true; showMenu(false);
 
   // asegurar sala existe
   const roomSnap = await get(roomRef);
@@ -361,33 +360,27 @@ async function joinSingleRoom(){
     await set(roomRef,{estado:'esperando',jugCount:0,max:10});
   }
 
-  // hostId por transacción (si no existe)
-  const hostRes = await runTransaction(ref(db,`partidas/${ROOM_ID}/hostId`), cur => cur || 'PENDING');
-  if(hostRes.snapshot.val()==='PENDING'){
-    await update(roomRef,{hostId:'',}); // limpiar si quedó así
-  }
-  if(!hostRes.committed || hostRes.snapshot.val()==='PENDING'){
-    // segundo intento: si sigue vacío, me asigno
-    await runTransaction(ref(db,`partidas/${ROOM_ID}/hostId`), cur => cur || (myId||'temp'));
-  }
+  // 1) Crear mi nodo jugador primero → obtener myId
+  const node = push(jugRef); myId = node.key;
 
-  // crear jugador
-  const node=push(jugRef); myId=node.key;
-  // set hostId si está vacío
-  const hostSnap=await get(ref(db,`partidas/${ROOM_ID}/hostId`));
-  if(!hostSnap.exists() || !hostSnap.val() || hostSnap.val()==='PENDING'){ await set(ref(db,`partidas/${ROOM_ID}/hostId`), myId); }
+  // 2) Si hostId está vacío, me lo quedo
+  await runTransaction(ref(db,`partidas/${ROOM_ID}/hostId`), cur => cur || myId);
   const hostFinal=await get(ref(db,`partidas/${ROOM_ID}/hostId`));
   isHost = (hostFinal.val()===myId);
 
-  await set(ref(db,`partidas/${ROOM_ID}/jugadores/${myId}`),{nick:myNick,alive:true,hp:1000,x:0,y:0,vx:0,vy:0,spinRPM:0});
+  // 3) Posición provisional en ESPERANDO (quieto)
+  setupArena();
+  const p=randomSpawn();
+  await set(ref(db,`partidas/${ROOM_ID}/jugadores/${myId}`),{
+    nick:myNick,alive:true,hp:1000,x:p.x,y:p.y,vx:0,vy:0,spinRPM:0
+  });
   onDisconnect(ref(db,`partidas/${ROOM_ID}/jugadores/${myId}`)).remove();
-  onDisconnect(ref(db,`partidas/${ROOM_ID}/events`)).cancel(); // por si era host antes
 
-  // contador
+  // 4) Contador jugadores
   await runTransaction(ref(db,`partidas/${ROOM_ID}/jugCount`),c=>(c||0)+1);
   onDisconnect(ref(db,`partidas/${ROOM_ID}/jugCount`)).set((await get(ref(db,`partidas/${ROOM_ID}/jugCount`))).val()-1);
 
-  // si soy host y estado esperando con 2+, programo 'pre'
+  // 5) Si soy host y estado esperando con 2+, programo 'pre'
   onValue(roomRef, async s=>{
     const v=s.val()||{}, c=v.jugCount||0;
     if(isHost && v.estado==='esperando' && c>=2){
@@ -395,8 +388,9 @@ async function joinSingleRoom(){
     }
   });
 
-  // escuchar eventos/estado
-  setupArena();
+  // mostrar lobby con tu beyblade quieto
+  overlay('ESPERANDO','Se necesitan 2+ jugadores');
+  game.phase='lobby';
 }
 
 /* envío periódico de mi estado y cierre de partida */
