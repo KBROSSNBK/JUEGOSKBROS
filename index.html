@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"/>
-<title>Beyblade Neon Online (Sala Única)</title>
+<title>FINALKRASH — Online (Sala Única)</title>
 <style>
   :root{ --bg:#0a0c10; --ink:#e9f0ff; --muted:#a7b0c8; --hp1:#2ecc71; --hp2:#ff4a6e; }
   *{box-sizing:border-box}
@@ -70,7 +70,7 @@
   </div>
   <div class="center">
     <div id="menu" class="card">
-      <h1 class="title">BEYBLADE NEON – ONLINE</h1>
+      <h1 class="title">FINALKRASH — ONLINE</h1>
       <div class="muted">Escribe tu <b>apodo</b> y toca <b>ENTRAR AL JUEGO</b>. La partida inicia con <b>2+</b> jugadores (máx 10).</div>
       <div class="row">
         <input id="nick" placeholder="Tu apodo" maxlength="16" />
@@ -164,8 +164,8 @@ let myId=null, myNick=null, isHost=false, joined=false;
 let resetTimer = null;
 
 /* -------- Mundo / Arena -------- */
-const arena={cx:0,cy:0,r:0,innerR:0,pillarR:0};
-function setupArena(){ arena.cx=W/2; arena.cy=H/2; arena.r=Math.min(W,H)*0.40; arena.innerR=arena.r*0.94; arena.pillarR=arena.r*0.12; }
+const arena={cx:0,cy:0,r:0,innerR:0};
+function setupArena(){ arena.cx=W/2; arena.cy=H/2; arena.r=Math.min(W,H)*0.40; arena.innerR=arena.r*0.94; }
 
 /* partículas + confeti */
 const sparks=[]; 
@@ -229,16 +229,6 @@ class Blade{
       this.spinRPM=Math.max(0,this.spinRPM-wallLossRPM);
       this.dmgHP(wallHP);
       spawnSparks(this.x,this.y,16,28); pushEvent({type:'wall',x:this.x,y:this.y,h:28});
-    }
-    // Pilar central
-    const pdx=this.x-arena.cx, pdy=this.y-arena.cy, pd=Math.hypot(pdx,pdy);
-    if(pd < arena.pillarR + this.radius){
-      const nx=pdx/pd, ny=pdy/pd, overlap=(arena.pillarR+this.radius)-pd;
-      this.x+=nx*overlap; this.y+=ny*overlap;
-      const vn=this.vx*nx+this.vy*ny; this.vx-=(2.2*vn)*nx; this.vy-=(2.2*vn)*ny;
-      let pLoss=100, php=7; if(this.shield>0){ pLoss*=0.5; php*=0.6; }
-      this.spinRPM=Math.max(0,this.spinRPM-pLoss); this.dmgHP(php);
-      spawnSparks(this.x,this.y,18,200); pushEvent({type:'pillar',x:this.x,y:this.y,h:200});
     }
   }
   draw(){
@@ -355,9 +345,7 @@ function drawArena(){
     const g=ctx.createRadialGradient(0,0,r*0.2,0,0,r); g.addColorStop(0,'#0c1120'); g.addColorStop(1,'#080b12'); ctx.fillStyle=g; ctx.fill();
     ctx.strokeStyle = i%2 ? 'rgba(0,231,255,.30)' : 'rgba(138,43,255,.26)'; ctx.lineWidth = i===6?6:4; if(i===5) ctx.setLineDash([10,10]); else ctx.setLineDash([]); ctx.shadowColor = i%2?'rgba(0,231,255,.45)':'rgba(138,43,255,.4)'; ctx.shadowBlur=8; ctx.stroke(); ctx.shadowBlur=0;
   }
-  // pilar central
-  ctx.beginPath(); ctx.setLineDash([]); ctx.fillStyle='rgba(255,255,255,.06)'; ctx.strokeStyle='rgba(0,231,255,.55)'; ctx.lineWidth=4;
-  ctx.arc(0,0,arena.pillarR,0,TAU); ctx.fill(); ctx.stroke();
+  // borde interior
   ctx.beginPath(); ctx.arc(0,0,arena.innerR,0,TAU); ctx.setLineDash([8,10]); ctx.strokeStyle='rgba(255,255,255,.25)'; ctx.lineWidth=2; ctx.stroke();
   ctx.restore();
 }
@@ -506,7 +494,7 @@ onValue(roomRef, async s=>{
     if (isHost) {
       if (resetTimer) clearTimeout(resetTimer);
       resetTimer = setTimeout(async () => {
-        await update(roomRef, { estado:'esperando', tPre:null, tGo:null, winnerNick:null, posSeeded:false });
+        await update(roomRef, { estado:'esperando', tPre:null, tGo:null, winnerNick:null, posSeeded:false, items:null });
         const snap2 = await get(roomRef);
         const vv = snap2.val() || {};
         const c = vv.jugCount || 0;
@@ -519,20 +507,18 @@ onValue(roomRef, async s=>{
   }
 });
 
-/* Spawner de ítems (solo host) */
+/* Spawner de ítems (solo host) — cada 1.5s */
 setInterval(async ()=>{
   if(!isHost) return;
   const state = await get(ref(db,`partidas/${ROOM_ID}/estado`));
   if(state.val()!=='jugando') return;
   const snap = await get(itemsRef);
   const count = snap.exists()? Object.keys(snap.val()).length : 0;
-  if(count >= 3) return;
-
-  // spawn
+  if(count >= 4) return; // pequeño límite para no saturar
   const p = randomSpawn();
   const type = ITEM_TYPES[Math.floor(Math.random()*ITEM_TYPES.length)];
   await push(itemsRef, { x:p.x, y:p.y, type, created: serverTimestamp() });
-}, 2000); // chequeo liviano; no siempre spawnea, solo si faltan
+}, 1500);
 
 /* Unirse a sala única */
 async function joinSingleRoom(){
