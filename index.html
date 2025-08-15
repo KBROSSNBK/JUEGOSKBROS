@@ -191,7 +191,7 @@ class Blade{
   fairLaunch(angle){ const v=8.5,rpm=this.maxRPM*0.85; this.queued={vx:Math.cos(angle)*v, vy:Math.sin(angle)*v, rpm}; this.hasLaunched=true; }
   commitQueued(){ if(!this.queued) return; this.vx=this.queued.vx; this.vy=this.queued.vy; this.spinRPM=this.queued.rpm; this.launching=false; this.queued=null; }
   applyBoost(dx,dy){ if(this.boostCD>0||!this.alive) return; const m=Math.hypot(dx,dy)||1, nx=dx/m, ny=dy/m; const str=3.2; this.vx+=nx*str; this.vy+=ny*str; this.boostCD=0.75;
-    const p={x<this.x+nx*this.radius?this.x+nx*this.radius:this.x, y<this.y+ny*this.radius?this.y+ny*this.radius:this.y}; const n=pxToN(p.x,p.y); pushEventN(n.nx,n.ny,'boost',45); spawnSparks(p.x,p.y,10,45); }
+    const p={x:this.x+nx*this.radius,y:this.y+ny*this.radius}; const n=pxToN(p.x,p.y); pushEventN(n.nx,n.ny,'boost',45); spawnSparks(p.x,p.y,10,45); }
   dmgHP(d){ this.hp=Math.max(0,this.hp-d); if(this.hp<=0) this.alive=false; }
   step(dt){
     this.boostCD=Math.max(0,this.boostCD-dt);
@@ -316,6 +316,7 @@ function drawArena(){
     const g=ctx.createRadialGradient(0,0,r*0.2,0,0,r); g.addColorStop(0,'#0c1120'); g.addColorStop(1,'#080b12'); ctx.fillStyle=g; ctx.fill();
     ctx.strokeStyle = i%2 ? 'rgba(0,231,255,.30)' : 'rgba(138,43,255,.26)'; ctx.lineWidth = i===6?6:4; if(i===5) ctx.setLineDash([10,10]); else ctx.setLineDash([]); ctx.shadowColor = i%2?'rgba(0,231,255,.45)':'rgba(138,43,255,.4)'; ctx.shadowBlur=8; ctx.stroke(); ctx.shadowBlur=0;
   }
+  // borde
   ctx.beginPath(); ctx.arc(0,0,arena.innerR,0,TAU); ctx.setLineDash([8,10]); ctx.strokeStyle='rgba(255,255,255,.25)'; ctx.lineWidth=2; ctx.stroke();
   ctx.restore();
 }
@@ -385,7 +386,7 @@ onValue(jugRef, s=>{
 
   ensureHost(ids);
 
-  // mantener jugCount actualizado (para arranque automático)
+  // NUEVO: el host mantiene jugCount actualizado en la sala
   if(isHost){
     update(roomRef,{jugCount: ids.length}).catch(()=>{});
   }
@@ -418,10 +419,10 @@ onValue(jugRef, s=>{
   });
   hud.lobbyCount.textContent=`(${ids.length}/10)`;
 
-  // por si entra/sale alguien mientras 'esperando'
+  // (Se mantiene la lógica previa por si entra/alguien sale mientras está en 'esperando')
   if(isHost && currentState==='esperando' && ids.length>=2){
     const now=Date.now();
-    update(roomRef,{estado:'pre', tPre: now+10000, posSeeded:false, tGo:null, winnerNick:null, tFin:null, tRestart:null}).catch(()=>{});
+    update(roomRef,{estado:'pre', tPre: now+10000, posSeeded:false, tGo:null, winnerNick:null, tFin:null}).catch(()=>{});
   }
   hud.lobby.style.display = (currentState==='esperando'||currentState==='pre'||currentState==='lanzamiento') ? 'block' : 'none';
 });
@@ -432,7 +433,7 @@ async function recoverIfStuck(v){
   if(v.estado==='fin' && (now-(v.tFin||0))>7000){
     const tx=await runTransaction(ref(db,`partidas/${ROOM_ID}/estado`), cur => cur==='fin'?'esperando':cur);
     if(tx.committed && tx.snapshot.val()==='esperando'){
-      await update(roomRef,{ tPre:null,tGo:null,winnerNick:null,posSeeded:false,tFin:null, tRestart:null });
+      await update(roomRef,{ tPre:null,tGo:null,winnerNick:null,posSeeded:false,tFin:null });
       await remove(itemsRef).catch(()=>{});
       await remove(evRef).catch(()=>{});
       const js=await get(jugRef); const cnt=js.exists()?Object.keys(js.val()).length:0;
@@ -449,17 +450,17 @@ onValue(roomRef, async s=>{
   if(v.estado!=='fin') clearConfetti();
 
   if(v.estado==='esperando'){
-    // si está en esperando y hay 2+, arranca pre (10s)
+    // NUEVO: si el estado volvió a 'esperando' y YA hay 2+ conectados, el host arranca pre (10s)
     if(isHost && (v.jugCount||0) >= 2){
       const now=Date.now();
-      update(roomRef,{estado:'pre', tPre: now+10000, posSeeded:false, tGo:null, winnerNick:null, tFin:null, tRestart:null}).catch(()=>{});
+      update(roomRef,{estado:'pre', tPre: now+10000, posSeeded:false, tGo:null, winnerNick:null, tFin:null}).catch(()=>{});
     }
+
     if(!joined){ showMenu(true); hideOverlay(); }
     else { showMenu(false); overlay('ESPERANDO','Se necesitan 2+ jugadores'); }
   }
 
   if(v.estado==='pre'){
-    // host siembra posiciones e ítems desde cero
     if(isHost && !v.posSeeded){
       const j=await get(jugRef); const updates={};
       j.forEach(js=>{ const id=js.key; const p=randomSpawnN();
@@ -501,59 +502,13 @@ onValue(roomRef, async s=>{
   }
 
   if(v.estado==='fin'){
-    // 1) mostrar ganador + confeti + contador de reinicio sincronizado
-    if(joined){
-      overlay(`¡${v.winnerNick || 'Ganador'}!`, ''); startConfettiBurst();
-      const tickRestart=()=>{
-        if(!v.tRestart){ hud.small.textContent=''; return; }
-        const left=Math.max(0,Math.ceil((v.tRestart - Date.now())/1000));
-        hud.small.textContent = `LA SIGUIENTE PARTIDA COMIENZA EN ${left} SEGUNDOS`;
-        if(left>0) setTimeout(tickRestart,200);
-      }; tickRestart();
-    }
-
-    // 2) el host fija tRestart si no existe y programa el salto
+    if(joined && v.winnerNick){ overlay(`¡${v.winnerNick}!`,'CAMPEÓN'); startConfettiBurst(); setTimeout(()=>hideOverlay(),5000); }
     if(isHost){
-      if(!v.tRestart){
-        await update(roomRef,{ tRestart: Date.now()+5000 }).catch(()=>{});
-      }
       if(resetTimer) clearTimeout(resetTimer);
-      const delay=Math.max(0, (v.tRestart||Date.now()+5000) - Date.now()) + 30;
       resetTimer=setTimeout(async ()=>{
-        // limpiar items/eventos
+        await update(roomRef,{ estado:'esperando', tPre:null,tGo:null,winnerNick:null,posSeeded:false,tFin:Date.now() });
         await remove(itemsRef).catch(()=>{}); await remove(evRef).catch(()=>{});
-
-        // contar jugadores
-        const js=await get(jugRef); const ids = js.exists()? Object.keys(js.val()) : [];
-        if(ids.length>=2){
-          // reseed + reset HP y buffs
-          const updates={};
-          ids.forEach(id=>{
-            const p=randomSpawnN();
-            updates[`partidas/${ROOM_ID}/jugadores/${id}/x`]=p.nx;
-            updates[`partidas/${ROOM_ID}/jugadores/${id}/y`]=p.ny;
-            updates[`partidas/${ROOM_ID}/jugadores/${id}/vx`]=0;
-            updates[`partidas/${ROOM_ID}/jugadores/${id}/vy`]=0;
-            updates[`partidas/${ROOM_ID}/jugadores/${id}/spinRPM`]=0;
-            updates[`partidas/${ROOM_ID}/jugadores/${id}/hp`]=1000;
-            updates[`partidas/${ROOM_ID}/jugadores/${id}/alive`]=true;
-            updates[`partidas/${ROOM_ID}/jugadores/${id}/shieldUntil`]=null;
-            updates[`partidas/${ROOM_ID}/jugadores/${id}/giantUntil`]=null;
-            updates[`partidas/${ROOM_ID}/jugadores/${id}/damageUntil`]=null;
-          });
-          updates[`partidas/${ROOM_ID}/estado`]='lanzamiento';
-          updates[`partidas/${ROOM_ID}/tGo`]=Date.now()+3000;
-          updates[`partidas/${ROOM_ID}/tPre`]=null;
-          updates[`partidas/${ROOM_ID}/winnerNick`]=null;
-          updates[`partidas/${ROOM_ID}/posSeeded`]=true;
-          updates[`partidas/${ROOM_ID}/tFin`]=Date.now();
-          updates[`partidas/${ROOM_ID}/tRestart`]=null;
-          await update(ref(db),updates);
-        }else{
-          // volver a esperando si no alcanza el mínimo
-          await update(roomRef,{ estado:'esperando', tPre:null,tGo:null,winnerNick:null,posSeeded:false,tFin:Date.now(), tRestart:null });
-        }
-      }, delay);
+      },5000);
     }else{
       recoverIfStuck(v);
     }
@@ -610,7 +565,7 @@ setInterval(async ()=>{
       const j=await get(jugRef); let alive=[];
       j.forEach(js=>{ const v=js.val(); if(v && v.alive!==false && (v.hp??1)>0) alive.push({id:js.key,nick:v.nick}); });
       if(alive.length<=1){
-        await update(roomRef,{estado:'fin',winnerNick: (alive[0]?.nick || 'Nadie'), tFin: Date.now(), tRestart: Date.now()+5000});
+        await update(roomRef,{estado:'fin',winnerNick: (alive[0]?.nick || 'Nadie'), tFin: Date.now()});
       }
     }
   }
