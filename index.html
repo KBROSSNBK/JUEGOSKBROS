@@ -156,7 +156,7 @@ function drawSparks(dt){ ctx.save(); ctx.globalCompositeOperation='lighter';
     ctx.fillStyle=`rgba(255,255,255,${a*0.8})`; ctx.beginPath(); ctx.arc(s.x,s.y,r*0.4,0,TAU); ctx.fill(); }
   ctx.restore(); }
 
-/* Confeti: pequeño estallido desde el centro */
+/* Confeti: estallido moderado desde el centro */
 const confetti=[];
 function startConfettiBurst(){
   confetti.length=0;
@@ -190,8 +190,17 @@ class Blade{
   sprite(){ if(!this.s) this.s=makeSprite(this.baseRadius,this.color,this.accent); return this.s; }
   fairLaunch(angle){ const v=8.5,rpm=this.maxRPM*0.85; this.queued={vx:Math.cos(angle)*v, vy:Math.sin(angle)*v, rpm}; this.hasLaunched=true; }
   commitQueued(){ if(!this.queued) return; this.vx=this.queued.vx; this.vy=this.queued.vy; this.spinRPM=this.queued.rpm; this.launching=false; this.queued=null; }
-  applyBoost(dx,dy){ if(this.boostCD>0||!this.alive) return; const m=Math.hypot(dx,dy)||1, nx=dx/m, ny=dy/m; const str=3.2; this.vx+=nx*str; this.vy+=ny*str; this.boostCD=0.75;
-    const p={x<this.x+nx*this.radius?this.x+nx*this.radius:this.x, y<this.y+ny*this.radius?this.y+ny*this.radius:this.y}; const n=pxToN(p.x,p.y); pushEventN(n.nx,n.ny,'boost',45); spawnSparks(p.x,p.y,10,45); }
+  applyBoost(dx,dy){ 
+    if(this.boostCD>0||!this.alive) return; 
+    const m=Math.hypot(dx,dy)||1, nx=dx/m, ny=dy/m; 
+    const str=3.2; 
+    this.vx+=nx*str; this.vy+=ny*str; 
+    this.boostCD=0.75;
+    const p={x:this.x+nx*this.radius, y:this.y+ny*this.radius}; // <- FIX aquí
+    const n=pxToN(p.x,p.y); 
+    pushEventN(n.nx,n.ny,'boost',45); 
+    spawnSparks(p.x,p.y,10,45); 
+  }
   dmgHP(d){ this.hp=Math.max(0,this.hp-d); if(this.hp<=0) this.alive=false; }
   step(dt){
     this.boostCD=Math.max(0,this.boostCD-dt);
@@ -418,7 +427,6 @@ onValue(jugRef, s=>{
   });
   hud.lobbyCount.textContent=`(${ids.length}/10)`;
 
-  // por si entra/sale alguien mientras 'esperando'
   if(isHost && currentState==='esperando' && ids.length>=2){
     const now=Date.now();
     update(roomRef,{estado:'pre', tPre: now+10000, posSeeded:false, tGo:null, winnerNick:null, tFin:null, tRestart:null}).catch(()=>{});
@@ -449,7 +457,6 @@ onValue(roomRef, async s=>{
   if(v.estado!=='fin') clearConfetti();
 
   if(v.estado==='esperando'){
-    // si está en esperando y hay 2+, arranca pre (10s)
     if(isHost && (v.jugCount||0) >= 2){
       const now=Date.now();
       update(roomRef,{estado:'pre', tPre: now+10000, posSeeded:false, tGo:null, winnerNick:null, tFin:null, tRestart:null}).catch(()=>{});
@@ -459,7 +466,6 @@ onValue(roomRef, async s=>{
   }
 
   if(v.estado==='pre'){
-    // host siembra posiciones e ítems desde cero
     if(isHost && !v.posSeeded){
       const j=await get(jugRef); const updates={};
       j.forEach(js=>{ const id=js.key; const p=randomSpawnN();
@@ -501,7 +507,6 @@ onValue(roomRef, async s=>{
   }
 
   if(v.estado==='fin'){
-    // 1) mostrar ganador + confeti + contador de reinicio sincronizado
     if(joined){
       overlay(`¡${v.winnerNick || 'Ganador'}!`, ''); startConfettiBurst();
       const tickRestart=()=>{
@@ -512,7 +517,6 @@ onValue(roomRef, async s=>{
       }; tickRestart();
     }
 
-    // 2) el host fija tRestart si no existe y programa el salto
     if(isHost){
       if(!v.tRestart){
         await update(roomRef,{ tRestart: Date.now()+5000 }).catch(()=>{});
@@ -520,13 +524,10 @@ onValue(roomRef, async s=>{
       if(resetTimer) clearTimeout(resetTimer);
       const delay=Math.max(0, (v.tRestart||Date.now()+5000) - Date.now()) + 30;
       resetTimer=setTimeout(async ()=>{
-        // limpiar items/eventos
         await remove(itemsRef).catch(()=>{}); await remove(evRef).catch(()=>{});
 
-        // contar jugadores
         const js=await get(jugRef); const ids = js.exists()? Object.keys(js.val()) : [];
         if(ids.length>=2){
-          // reseed + reset HP y buffs
           const updates={};
           ids.forEach(id=>{
             const p=randomSpawnN();
@@ -550,7 +551,6 @@ onValue(roomRef, async s=>{
           updates[`partidas/${ROOM_ID}/tRestart`]=null;
           await update(ref(db),updates);
         }else{
-          // volver a esperando si no alcanza el mínimo
           await update(roomRef,{ estado:'esperando', tPre:null,tGo:null,winnerNick:null,posSeeded:false,tFin:Date.now(), tRestart:null });
         }
       }, delay);
