@@ -350,7 +350,7 @@ function loop(t){
   drawArena();
 
   const arr=[...game.blades.values()];
-  for(const b of arr) b.step(dt);              // todos hacen step (buffs visibles)
+  for(const b of arr) b.step(dt);
   if(currentState==='jugando'){ for(const b of arr) b.launching=false; }
 
   for(let i=0;i<arr.length;i++) for(let j=i+1;j<arr.length;j++) collide(arr[i],arr[j]);
@@ -369,11 +369,24 @@ requestAnimationFrame(loop);
 onChildAdded(evRef, snap=>{ const e=snap.val(); if(!e) return; const p=nToPx(e.x??0,e.y??0); spawnSparks(p.x,p.y, e.type==='hit'?20:12, e.h??35); });
 
 /* Jugadores */
+async function ensureHost(ids){
+  if(!myId) return;
+  const hSnap = await get(ref(db,`partidas/${ROOM_ID}/hostId`));
+  const h = hSnap.val();
+  if(!h || !ids.includes(h)){
+    // toma el host si está libre o si el host actual ya no existe
+    await update(roomRef,{hostId: myId}).catch(()=>{});
+    isHost = true;
+  }else{
+    isHost = (h===myId);
+  }
+}
+
 onValue(jugRef, s=>{
   const obj=s.val()||{}; const ids=Object.keys(obj); hud.lblPlayers.textContent=ids.length;
 
-  // host mantiene jugCount en la sala
-  if(isHost){ update(roomRef,{jugCount: ids.length}).catch(()=>{}); }
+  // asegurar que exista un host válido
+  ensureHost(ids);
 
   for(const id in obj){
     const p=obj[id];
@@ -502,7 +515,7 @@ setInterval(async ()=>{
   const st=await get(ref(db,`partidas/${ROOM_ID}/estado`)); if(st.val()!=='jugando') return;
   const snap=await get(itemsRef);
   const count=snap.exists()?Object.keys(snap.val()).length:0;
-  if(count>=6) return;                               // <<< LÍMITE 6
+  if(count>=6) return;                               // límite = 6
   const p=randomSpawnN();
   await push(itemsRef,{ nx:p.nx, ny:p.ny, type:ITEM_TYPES[Math.floor(Math.random()*ITEM_TYPES.length)], created: serverTimestamp() });
 },1500);
@@ -510,6 +523,12 @@ setInterval(async ()=>{
 /* Unirse */
 async function joinSingleRoom(){
   myNick=(hud.nick.value||'').trim(); if(!myNick){ alert('Escribe tu apodo'); return; }
+
+  // chequeo de sala llena (máx 10)
+  const js = await get(jugRef);
+  const nJug = js.exists()? Object.keys(js.val()).length : 0;
+  if(nJug >= 10){ alert('La sala está llena (10/10).'); return; }
+
   const r=await get(roomRef); if(!r.exists()){ await set(roomRef,{estado:'esperando',jugCount:0,max:10}); }
   joined=true; showMenu(false);
 
