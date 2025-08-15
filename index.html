@@ -281,7 +281,7 @@ function drawItems(){
     ctx.shadowBlur=0; ctx.globalAlpha=1; ctx.font=`${Math.floor(itemR()*1.3)}px system-ui, emoji`; ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText(emoji,p.x,p.y+1); ctx.restore();
   });
-});
+}
 onValue(itemsRef,s=>{ items.clear(); const v=s.val()||{}; for(const id in v) items.set(id,{id,...v[id]}); });
 
 /* Pickup con sincronización de buffs (visibles para todos) */
@@ -299,7 +299,7 @@ async function tryPickup(me){
 
       const now=Date.now(), dur=6000;  // 6s
       if(it.type==='shield'){ me.shield=Math.max(me.shield,dur/1000); await update(ref(db,`partidas/${ROOM_ID}/jugadores/${myId}`),{shieldUntil: now+dur}); toast('🛡️ Escudo'); }
-      if(it.type==='giant'){  me.giant =Math.max(me.giant ,dur/1000); await update(ref(db,`partidas/${ROOM_ID}/jugadores/${myId}`),{giantUntil : now+dur}); toast('🦍 Gigante'); }
+      if(it.type==='giant'){  me.giant =Math.max(me.giant ,dur/1000); await update(ref(db,`partidas/${ROOM_ID}/jugadores/${myId}`),{giantUntil : now+dur});  toast('🦍 Gigante'); }
       if(it.type==='damage'){ me.dmg   =Math.max(me.dmg  ,dur/1000); await update(ref(db,`partidas/${ROOM_ID}/jugadores/${myId}`),{damageUntil: now+dur}); toast('💥 Daño+'); }
       if(it.type==='rpm'){    me.spinRPM=Math.min(me.maxRPM*1.05, me.spinRPM+700); toast('⚡ RPM+'); }
       const n=pxToN(p.x,p.y); pushEventN(n.nx,n.ny,'item', it.type==='rpm'?100:30);
@@ -350,7 +350,7 @@ function loop(t){
   drawArena();
 
   const arr=[...game.blades.values()];
-  for(const b of arr) b.step(dt);              // todos hacen step (buffs visibles para todos)
+  for(const b of arr) b.step(dt);              // todos hacen step (buffs visibles)
   if(currentState==='jugando'){ for(const b of arr) b.launching=false; }
 
   for(let i=0;i<arr.length;i++) for(let j=i+1;j<arr.length;j++) collide(arr[i],arr[j]);
@@ -372,7 +372,7 @@ onChildAdded(evRef, snap=>{ const e=snap.val(); if(!e) return; const p=nToPx(e.x
 onValue(jugRef, s=>{
   const obj=s.val()||{}; const ids=Object.keys(obj); hud.lblPlayers.textContent=ids.length;
 
-  // host mantiene jugCount (solo informativo)
+  // host mantiene jugCount en la sala
   if(isHost){ update(roomRef,{jugCount: ids.length}).catch(()=>{}); }
 
   for(const id in obj){
@@ -405,7 +405,7 @@ onValue(jugRef, s=>{
   });
   hud.lobbyCount.textContent=`(${ids.length}/10)`;
 
-  // *** ARRANQUE AUTOMÁTICO *** (si hay 2+) — SOLO HOST
+  // ARRANQUE AUTOMÁTICO: si soy host y hay 2+ -> pre (10 s)
   if(isHost && currentState==='esperando' && ids.length>=2){
     const now=Date.now();
     update(roomRef,{estado:'pre', tPre: now+10000, posSeeded:false, tGo:null, winnerNick:null, tFin:null}).catch(()=>{});
@@ -496,12 +496,15 @@ onValue(roomRef, async s=>{
   }
 });
 
-/* Spawner de ítems (host) */
+/* Spawner de ítems (host) — límite 6 activos */
 setInterval(async ()=>{
   if(!isHost) return;
   const st=await get(ref(db,`partidas/${ROOM_ID}/estado`)); if(st.val()!=='jugando') return;
-  const snap=await get(itemsRef); const count=snap.exists()?Object.keys(snap.val()).length:0; if(count>=3) return;
-  const p=randomSpawnN(); await push(itemsRef,{ nx:p.nx, ny:p.ny, type:ITEM_TYPES[Math.floor(Math.random()*ITEM_TYPES.length)], created: serverTimestamp() });
+  const snap=await get(itemsRef);
+  const count=snap.exists()?Object.keys(snap.val()).length:0;
+  if(count>=6) return;                               // <<< LÍMITE 6
+  const p=randomSpawnN();
+  await push(itemsRef,{ nx:p.nx, ny:p.ny, type:ITEM_TYPES[Math.floor(Math.random()*ITEM_TYPES.length)], created: serverTimestamp() });
 },1500);
 
 /* Unirse */
