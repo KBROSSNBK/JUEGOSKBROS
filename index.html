@@ -374,7 +374,6 @@ async function ensureHost(ids){
   const hSnap = await get(ref(db,`partidas/${ROOM_ID}/hostId`));
   const h = hSnap.val();
   if(!h || !ids.includes(h)){
-    // toma el host si está libre o si el host actual ya no existe
     await update(roomRef,{hostId: myId}).catch(()=>{});
     isHost = true;
   }else{
@@ -385,8 +384,12 @@ async function ensureHost(ids){
 onValue(jugRef, s=>{
   const obj=s.val()||{}; const ids=Object.keys(obj); hud.lblPlayers.textContent=ids.length;
 
-  // asegurar que exista un host válido
   ensureHost(ids);
+
+  // NUEVO: el host mantiene jugCount actualizado en la sala
+  if(isHost){
+    update(roomRef,{jugCount: ids.length}).catch(()=>{});
+  }
 
   for(const id in obj){
     const p=obj[id];
@@ -402,7 +405,6 @@ onValue(jugRef, s=>{
       if(currentState==='pre' || currentState==='lanzamiento'){ b.x=pos.x; b.y=pos.y; b.vx=0; b.vy=0; b.spinRPM=0; b.launching=true; b.hasLaunched=false; }
     }
 
-    // aplicar expiraciones de buffs para TODOS
     const nowMs=Date.now();
     b.shield = Math.max(0, ((p.shieldUntil ?? 0) - nowMs) / 1000);
     b.giant  = Math.max(0, ((p.giantUntil  ?? 0) - nowMs) / 1000);
@@ -411,14 +413,13 @@ onValue(jugRef, s=>{
 
   for(const id of [...game.blades.keys()]) if(!obj[id]) game.blades.delete(id);
 
-  // listado
   hud.playerList.innerHTML='';
   ids.map(k=>obj[k]?.nick||'¿?').forEach(n=>{
     const li=document.createElement('li'); li.innerHTML=`<span class="dot"></span><span>${n}${n===myNick?' (tú)':''}</span>`; hud.playerList.appendChild(li);
   });
   hud.lobbyCount.textContent=`(${ids.length}/10)`;
 
-  // ARRANQUE AUTOMÁTICO: si soy host y hay 2+ -> pre (10 s)
+  // (Se mantiene la lógica previa por si entra/alguien sale mientras está en 'esperando')
   if(isHost && currentState==='esperando' && ids.length>=2){
     const now=Date.now();
     update(roomRef,{estado:'pre', tPre: now+10000, posSeeded:false, tGo:null, winnerNick:null, tFin:null}).catch(()=>{});
@@ -449,12 +450,17 @@ onValue(roomRef, async s=>{
   if(v.estado!=='fin') clearConfetti();
 
   if(v.estado==='esperando'){
+    // NUEVO: si el estado volvió a 'esperando' y YA hay 2+ conectados, el host arranca pre (10s)
+    if(isHost && (v.jugCount||0) >= 2){
+      const now=Date.now();
+      update(roomRef,{estado:'pre', tPre: now+10000, posSeeded:false, tGo:null, winnerNick:null, tFin:null}).catch(()=>{});
+    }
+
     if(!joined){ showMenu(true); hideOverlay(); }
     else { showMenu(false); overlay('ESPERANDO','Se necesitan 2+ jugadores'); }
   }
 
   if(v.estado==='pre'){
-    // host siembra posiciones e ítems
     if(isHost && !v.posSeeded){
       const j=await get(jugRef); const updates={};
       j.forEach(js=>{ const id=js.key; const p=randomSpawnN();
@@ -515,7 +521,7 @@ setInterval(async ()=>{
   const st=await get(ref(db,`partidas/${ROOM_ID}/estado`)); if(st.val()!=='jugando') return;
   const snap=await get(itemsRef);
   const count=snap.exists()?Object.keys(snap.val()).length:0;
-  if(count>=6) return;                               // límite = 6
+  if(count>=6) return;
   const p=randomSpawnN();
   await push(itemsRef,{ nx:p.nx, ny:p.ny, type:ITEM_TYPES[Math.floor(Math.random()*ITEM_TYPES.length)], created: serverTimestamp() });
 },1500);
@@ -524,7 +530,6 @@ setInterval(async ()=>{
 async function joinSingleRoom(){
   myNick=(hud.nick.value||'').trim(); if(!myNick){ alert('Escribe tu apodo'); return; }
 
-  // chequeo de sala llena (máx 10)
   const js = await get(jugRef);
   const nJug = js.exists()? Object.keys(js.val()).length : 0;
   if(nJug >= 10){ alert('La sala está llena (10/10).'); return; }
